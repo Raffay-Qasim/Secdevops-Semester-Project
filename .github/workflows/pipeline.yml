@@ -1,0 +1,56 @@
+name: SecDevOps Fail-Fast Pipeline
+
+on:
+  push:
+    branches: [ "main" ]
+
+jobs:
+  # -------------------------------------------------------------
+  # STAGE 1: SAST & Dependency Scan (Snyk)
+  # -------------------------------------------------------------
+  sast-scan:
+    name: Snyk Vulnerability Scan
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.9'
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run Snyk to check for vulnerabilities
+        uses: snyk/actions/python@master
+        env:
+          # This requires a free Snyk API token stored in GitHub Secrets
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        with:
+          args: --severity-threshold=high
+
+  # -------------------------------------------------------------
+  # STAGE 2: Container Build & Scan (Docker + Trivy)
+  # -------------------------------------------------------------
+  build-and-scan:
+    name: Build & Trivy Scan
+    needs: sast-scan # FAIL-FAST LOGIC: This stage will NOT run if Snyk fails
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Build Docker Image
+        run: docker build -t secdevops-app:latest .
+
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: 'secdevops-app:latest'
+          format: 'table'
+          exit-code: '1' # FAIL-FAST LOGIC: Fails the whole pipeline if CVEs are found
+          ignore-unfixed: true
+          vuln-type: 'os,library'
+          severity: 'CRITICAL,HIGH'
