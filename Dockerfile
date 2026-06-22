@@ -8,7 +8,7 @@ WORKDIR /app
 COPY requirements.txt .
 
 # Install the dependencies (this will install the vulnerable urllib3)
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --upgrade setuptools wheel && pip install --no-cache-dir -r requirements.txt
 
 # Copy the rest of the application code
 COPY app.py .
